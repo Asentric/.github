@@ -12,39 +12,25 @@ Asentric is an open-source, logs-based on-chain security monitoring system for t
 
 It ingests Ethereum event logs directly from Mantle RPC, normalizes them into structured security events, evaluates them using a rule engine, and publishes actionable alerts in near real-time.
 
-The system is built as a hackathon-grade SDK and backend:
+The project serves both as a public security monitoring service and as a developer SDK, enabling protocol teams and independent developers to extend the rule engine, add custom protocol mappings, and deploy private monitoring instances.
 
-- Infrastructure and domain logic are strictly separated
-- The watcher is reusable as a standalone SDK (`pkg/watcher`)
-- Processor and dispatcher consume a clean domain model (`LogEvent`)
-- The codebase is optimized for fast iteration and clarity, not long-term public API stability
+**🎥 [Watch Demo Video](https://youtu.be/Oz2dfZPI_8A)**
 
----
+## Problem Statement
 
-## Why Logs-Based (Not Tx-Based)
+Developers and users on Mantle Network currently lack real-time visibility into high-risk on-chain events such as:
 
-Asentric intentionally uses event logs instead of full blocks or transaction-level execution.
+- Unauthorized role or permission changes
+- Large withdrawals from protocol vaults
+- Sensitive function calls
+- Smart contract upgrades
+- Suspicious interactions from new or unknown wallets
 
-**Rationale:**
+While general monitoring solutions (Forta, Tenderly, block explorers) exist, they are not tailored for the Mantle ecosystem. Asentric addresses this gap by providing Mantle-first risk detection that focuses exclusively on smart contract interactions, reducing noise while delivering faster and more contextually relevant alerts.
 
-- Mantle / OP Stack RPCs may return partial or pruned historical data
-- `eth_getBlockByHash` and block re-fetch can be brittle on non-archive or shared RPCs
-- Logs are:
-  - Deterministic
-  - Indexed
-  - Cheap to query
-  - Relatively stable across node implementations
+## Architecture
 
-**Design principle:**
-
-> Security monitoring should observe protocol intent, not replay EVM execution.  
-> Logs capture what actually happened at the protocol level.
-
----
-
-## Architecture (Logs-Based)
-
-High-level data flow:
+Asentric follows a modular, event-driven architecture:
 
 ```text
 Watcher (Go, Infra-only)
