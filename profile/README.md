@@ -1,302 +1,334 @@
 ## Asentric
 
-**Mantle Security Realtime Alerting**
+**A Go SDK for building real-time blockchain security monitoring with custom detection rules.**
 
-A lightweight, logs-based smart contract security monitoring system for Mantle Network, built for speed, clarity, and hackathon iteration.
+[![Go Version](https://img.shields.io/badge/Go-%3E%3D%201.22-blue.svg)](https://golang.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+**🎥 [Watch Demo Video](https://youtu.be/Oz2dfZPI_8A)**
 
 ---
 
 ## Overview
 
-Asentric is an open-source, logs-based on-chain security monitoring system for the Mantle Network.
+Asentric SDK is a framework for real-time smart contract security monitoring that enables developers to:
 
-It ingests Ethereum event logs directly from Mantle RPC, normalizes them into structured security events, evaluates them using a rule engine, and publishes actionable alerts in near real-time.
+- Define monitoring targets via YAML configuration
+- Write custom detection logic in Go
+- Run self-hosted watchers
+- Receive alerts via webhook or console in real-time
 
-The project serves both as a public security monitoring service and as a developer SDK, enabling protocol teams and independent developers to extend the rule engine, add custom protocol mappings, and deploy private monitoring instances.
+Asentric is **not** a SaaS platform or YAML-based rule engine. It is an SDK with a runtime pattern similar to [Ponder.sh](https://ponder.sh), designed for developers who want full control over their security monitoring infrastructure.
 
-**🎥 [Watch Demo Video](https://youtu.be/Oz2dfZPI_8A)**
+**Built for the Mantle Network ecosystem, portable to any EVM chain.**
 
 ## Problem Statement
 
-Developers and users on Mantle Network currently lack real-time visibility into high-risk on-chain events such as:
+Most blockchain exploits are detectable minutes or hours before actual losses occur. Abnormal token transfers, suspicious privilege changes, and unusual contract interactions often precede attacks. However, existing tools either require complex infrastructure setup or lack the flexibility to detect protocol-specific risks.
 
-- Unauthorized role or permission changes
-- Large withdrawals from protocol vaults
-- Sensitive function calls
-- Smart contract upgrades
-- Suspicious interactions from new or unknown wallets
+**Our Solution:**
+Asentric provides a developer-friendly SDK with:
 
-While general monitoring solutions (Forta, Tenderly, block explorers) exist, they are not tailored for the Mantle ecosystem. Asentric addresses this gap by providing Mantle-first risk detection that focuses exclusively on smart contract interactions, reducing noise while delivering faster and more contextually relevant alerts.
+- **Custom Detection Rules** - Write security logic in Go, not YAML
+- **Real-time Monitoring** - WebSocket-based event streaming from any EVM chain
+- **Zero Infrastructure** - Works out-of-the-box with no Redis, no databases (for basic usage)
+- **Webhook Alerts** - Integrate with any backend or notification system
+- **Mantle Native** - Pre-configured for Mantle Sepolia, ready for mainnet
 
-## Architecture
+## Key Features
 
-Asentric follows a modular, event-driven architecture:
+| Feature | Description |
+|---------|-------------|
+| **Pure Detection Rules** | Write detection logic as pure functions with no side effects |
+| **Real-time Monitoring** | WebSocket-based event streaming from any EVM chain |
+| **Deterministic Execution** | Same input always produces same output, enabling replay and testing |
+| **Zero Dependencies** | No external infrastructure required for basic usage |
+| **Flexible Alerting** | Console output for development, webhook for production |
+| **EVM Compatible** | Works with any EVM-compatible blockchain |
 
-```text
-Watcher (Go, Infra-only)
-    ├─ Subscribes to logs via SubscribeFilterLogs (WebSocket)
-    ├─ Normalizes raw logs into LogEvent
-    └─ Optionally publishes LogEvent to Redis Streams (stream:raw)
+## Quick Start
 
-Processor (Go, Domain)
-    ├─ Consumes LogEvent from Redis
-    ├─ Resolves protocol metadata (registry)
-    ├─ Applies rule heuristics
-    ├─ Emits security alerts
-    └─ Publishes to alert stream (stream:alerts)
+### Installation
 
-Dispatcher (Go, Output)
-    ├─ Consumes security alerts
-    ├─ Formats messages
-    └─ Sends to X / Webhook / other channels (mocked for MVP)
+```bash
+go install github.com/asentric/asentric/cmd/asentric@latest
 ```
 
-**Message Transport:** Redis Streams  
-Used for ordered processing, replayability, and simple horizontal scaling via consumer groups.
+### Create a New Project
+
+```bash
+asentric init my-watcher
+cd my-watcher
+go mod tidy
+```
+
+### Run
+
+```bash
+go run cmd/watcher/main.go
+```
 
 ---
 
-## Core Design Principles (Hackathon SDK)
+## Architecture
 
-This project intentionally does **not** provide:
+Asentric SDK follows a clean, deterministic architecture:
 
-- Plugin ecosystems or extension marketplaces
-- Dynamic loading of untrusted third-party code
-- Long-term stable public APIs
-- A complex configuration or deployment story
+```
+[Blockchain]
+     │
+     │ WebSocket (eth_subscribe)
+     ▼
+┌─────────────┐
+│ EventSource │  ← Subscribe to logs/events
+└─────────────┘
+     │
+     │ Event
+     ▼
+┌─────────────┐     ┌─────────────────┐
+│ Dispatcher  │ ──► │ ContextBuilder  │
+└─────────────┘     └─────────────────┘
+     │                      │
+     │                      │ Context
+     │                      ▼
+     │              ┌─────────────┐
+     └────────────► │   Engine    │
+                    └─────────────┘
+                           │
+           ┌───────────────┼───────────────┐
+           ▼               ▼               ▼
+      [Rule 1]        [Rule 2]        [Rule N]
+           │               │               │
+           └───────────────┼───────────────┘
+                           │
+                           │ Alerts
+                           ▼
+                    ┌─────────────┐
+                    │  AlertSink  │  ← Send to webhook/console
+                    └─────────────┘
+```
 
-Instead, it focuses on:
+## Core Design Principles
 
-- A small, readable Go codebase
-- Clear boundaries between infra and domain logic
-- A reference implementation that is easy to fork and modify
+### SDK-First Approach
 
-### Clear Separation of Concerns
+Asentric is designed as a **framework**, not a service:
 
-| Layer      | Responsibility              |
-|-----------|-----------------------------|
-| Watcher   | Blockchain IO (logs only)   |
-| Processor | Security reasoning / rules  |
-| Dispatcher| Output & delivery           |
-| Registry  | Metadata, not logic         |
+- **YAML for configuration** - Configuration is declarative, not logic
+- **Rules are code** - Detection logic written in Go, not config
+- **Deterministic engine** - Same input always produces same output
+- **Runtime handles I/O** - Side effects managed by runtime, not rules
+- **Zero dependencies** - No external infrastructure required for basic usage
 
-No rule logic, protocol heuristics, or risk scoring live inside infrastructure code.
+### Pure Detection Rules
 
-### Reusable Watcher
+Rules are pure functions:
+- ✅ No side effects
+- ✅ No I/O operations
+- ✅ Deterministic
+- ✅ Easy to test
 
-The watcher SDK:
+### Clear Separation
 
-- Emits generic `LogEvent` domain events
-- Has zero knowledge of:
-  - Protocols
-  - Rules
-  - Severity or risk models
-
-This enables:
-
-- Multiple processors reading from the same raw stream
-- Parallel experimentation on rules without touching ingestion
-- Reuse of the same watcher SDK across different apps or deployments
-
-### Explicit SDK Scope
-
-The Asentric SDK is meant to:
-
-- Be understandable end-to-end during a hackathon
-- Be forked and adapted, rather than imported as a black box
-- Serve as a reference architecture for logs-based security monitoring
+| Component | Responsibility |
+|-----------|----------------|
+| **Engine** | Rule evaluation (pure, deterministic) |
+| **Runtime** | Event ingestion, alert delivery (I/O) |
+| **Rules** | Detection logic (pure functions) |
+| **Context** | Immutable data snapshot |
 
 ---
 
 ## Core Components
 
-### Watcher Service (Logs-Based)
+### Engine
 
-The watcher is a pure infrastructure service built around a small SDK in `pkg/watcher`.
+The rule execution engine that evaluates all registered rules against blockchain events.
 
-**Key pieces:**
+- **Stateless** - No per-event state storage
+- **Deterministic** - Same input → Same output
+- **Pure** - No I/O operations
 
-- `EventSource` interface for emitting `LogEvent`
-- `LogsSource` implementation using `SubscribeFilterLogs`
-- `StreamEngine` optional wrapper to publish `LogEvent` into Redis Streams
+### Rules
 
-**Responsibilities:**
+Custom detection logic implemented as Go structs.
 
-- Connect to Mantle RPC over WebSocket
-- Subscribe to logs using address/topic filters
-- Normalize `types.Log` into `domain.LogEvent`
-- Optionally publish `LogEvent` into `stream:raw` via Redis Streams
+**Example Rule:**
+```go
+type LargeTransferRule struct {
+    Threshold *big.Int
+}
 
-**Does not:**
+func (r *LargeTransferRule) Evaluate(ctx Context) (*Alert, error) {
+    for _, log := range ctx.Logs() {
+        if log.Event.Name == "Transfer" {
+            value := utils.GetFieldBigInt(log.Event.Fields, "value")
+            if value != nil && value.Cmp(r.Threshold) > 0 {
+                return asentric.NewAlert(...), nil
+            }
+        }
+    }
+    return nil, nil
+}
+```
 
-- Decode business meaning of events
-- Apply rule logic or make risk decisions
-- Know anything about specific protocols
+### Runtime
 
-### Processor Service (Rule Engine)
+Orchestrates event ingestion, rule evaluation, and alert delivery.
 
-The processor consumes normalized events (`LogEvent`) and applies security heuristics.
+- **EventSource** - WebSocket subscription to blockchain
+- **Dispatcher** - Bridges events to engine
+- **AlertSink** - Delivers alerts (console/webhook)
 
-**Responsibilities:**
+### Context
 
-- Convert Redis stream messages back into `LogEvent`
-- Resolve protocol metadata via the registry
-- Apply rule logic implemented as Go interfaces
-- Emit security alerts when rules are triggered
+Immutable snapshot of transaction data, block info, and event logs.
 
-Rules operate purely on:
-
-- `domain.LogEvent` (normalized on-chain event)
-- Optional `registry.ContractMeta` (context)
-
-### Dispatcher Service
-
-The dispatcher consumes alerts and forwards them to external channels.
-
-**Responsibilities:**
-
-- Consume alerts from `stream:alerts`
-- Format messages for human consumption
-- Send to X / Webhook / logging targets (mocked for MVP)
-
-The dispatcher is intentionally simple and focused on output mechanics.
-
-### Protocol Registry
-
-A YAML-based metadata registry used only for enrichment.
-
-**Stores:**
-
-- Contract address → protocol name / tags
-- Known event signatures
-- Risk-related metadata
-- Human-readable descriptions
-
-The registry is not an execution engine; logic remains in the processor and rule code.
+- Read-only access to transaction data
+- Decoded event logs
+- Block metadata
+- ABI registry for decoding
 
 ---
 
-## Rule Engine (MVP Scope)
+## Project Structure
 
-Rules are implemented as Go structs that satisfy a small interface (see `pkg/rules`).
+### SDK Repository (asentric-sdk)
 
-**MVP rules focus on:**
+```
+asentric-sdk/
+├── pkg/asentric/          # Public SDK API
+│   ├── engine.go          # Rule execution engine
+│   ├── rule.go            # Rule interface
+│   ├── context.go          # Execution context
+│   ├── alert.go            # Alert model
+│   └── runtime.go          # Runtime orchestrator
+├── cmd/asentric/          # CLI tools
+│   └── init               # Project scaffolding
+├── internal/              # Private implementation
+│   ├── source/            # EventSource implementations
+│   ├── sink/              # AlertSink implementations
+│   └── dispatcher/        # Event dispatcher
+├── examples/              # Usage examples
+└── docs/                  # Documentation
+```
 
-- Large withdrawals or high-value transfers
-- Unknown contract interactions
-- Role / ownership changes (e.g., `grantRole`, `transferOwnership`)
-- Contract upgrades (proxy events)
-- Sensitive event detection based on known selectors
+### User Project (Generated by `asentric init`)
 
-Rules consume only:
-
-- `domain.LogEvent` (normalized event)
-- Optional `registry.ContractMeta` (context)
-
----
+```
+my-watcher/
+├── config/
+│   ├── asentric.yaml      # Runtime configuration
+│   └── registry.yaml      # Target contracts
+├── rules/
+│   └── example_rule.go    # Detection rules
+├── abi/                   # Contract ABI files
+├── cmd/
+│   └── watcher/
+│       └── main.go        # Entry point
+└── go.mod
+```
 
 ## Technology Stack
 
 - **Language:** Go 1.22+
-- **Blockchain:** Mantle Network (OP Stack)
-- **Ethereum Client:** go-ethereum (via custom `pkg/client`)
-- **Transport:** Redis Streams
-- **Config:** YAML + environment variables (Viper)
-- **Deployment:** Docker / Docker Compose (MVP)
-- **Docs:** Separate `internal-docs` repository for internal architecture and operations
-
----
-
-## Project Structure (Backend Repository)
-
-Approximate layout of the backend repository:
-
-```text
-asentric/
-├── apps/
-│   ├── watcher/        # Watcher service (logs-based ingestion)
-│   ├── processor/      # Rule engine & alert generation
-│   └── dispatcher/     # Alert delivery
-├── pkg/
-│   ├── watcher/        # LogsSource, StreamEngine (watcher SDK)
-│   ├── domain/         # LogEvent and converters
-│   ├── rules/          # Rule interface and rule engine
-│   ├── registry/       # Protocol registry abstractions
-│   ├── alerts/         # Alert structures
-│   ├── mq/             # Redis Streams wrapper
-│   ├── client/         # Ethereum RPC client (SubscribeFilterLogs, etc.)
-│   └── config/         # Service configuration loaders
-├── configs/            # YAML configs for watcher / processor / dispatcher
-├── deployments/        # Docker / deployment manifests
-├── docs/               # Component-level docs (e.g. watcher implementation)
-└── Makefile            # Build and dev tooling
-```
-
-A separate `internal-docs/` repository contains:
-
-- High-level architecture and decision log
-- SDK and rule-engine specifications
-- Operations timeline and development guide
-- Security notes and internal processes
+- **Blockchain:** Mantle Network (EVM-compatible, portable to any EVM chain)
+- **Event Source:** WebSocket RPC (eth_subscribe)
+- **Config:** YAML-based configuration
+- **Alerting:** Console (dev) / Webhook (production)
 
 ---
 
 ## Current Status
 
-**Hackathon MVP**
+**Hackathon MVP - Delivered Components**
 
-**Included:**
+✅ **Core SDK** (`pkg/asentric`)
+- Pure, deterministic rule execution engine
+- Context-based event processing
+- Severity-based alert generation
+- Extensible rule interface
 
-- Logs-based watcher SDK (`pkg/watcher`)
-- `LogEvent` domain model (`pkg/domain`)
-- Rule engine operating on log events (`pkg/rules`)
-- Redis Streams pipeline (raw events and alerts)
-- Basic alert dispatcher (X / Webhook mocked)
-- YAML-based protocol registry
+✅ **CLI Tool** (`cmd/asentric`)
+- Project scaffolding with `asentric init`
+- Mantle Sepolia pre-configured
+- Ready-to-run project templates
+
+✅ **Runtime System**
+- WebSocket event source for real-time monitoring
+- Console and Webhook alert sinks
+- Builder pattern for easy configuration
 
 **Explicitly out of scope for MVP:**
 
 - Production-ready UI dashboard
 - Historical backfills and indexing jobs
-- Multi-chain support
-- Plugin / extension APIs
-- Strong stability guarantees for public APIs
+- Multi-chain per project (1 chain per project)
+- Plugin / extension marketplaces
+- Long-term stable public APIs
 
 ---
 
 ## Philosophy
 
-This project prioritizes correctness, debuggability, and architectural clarity over feature completeness.
+Asentric prioritizes **developer experience** and **architectural clarity** over feature completeness.
 
-Asentric is meant to be:
+**Design Goals:**
 
-- Understandable in hours, not weeks
-- Easy to fork and adapt to new protocols or chains
-- A clean starting point for more advanced production systems
+- ✅ Understandable in hours, not weeks
+- ✅ Easy to fork and adapt
+- ✅ Clean starting point for production systems
+- ✅ Simple > Complex
+- ✅ Code > Config (rules are Go, not YAML)
 
 ---
 
-## License
+## Documentation
 
-Asentric is released under the MIT License.  
-See the `LICENSE` file in the backend repository for details.
+- 📖 [Full Documentation](https://asentric-docs.vercel.app/) 
+
+## Use Cases
+
+### Protocol Teams
+Deploy private instances with custom rules tailored to your contracts. Early warning system for incident detection.
+
+### Security Researchers
+Extend the heuristics engine, propose new detection rules, and build protocol-specific monitoring agents.
+
+### Developers
+Build custom security monitoring systems with full control over detection logic and infrastructure.
 
 ---
 
 ## Contributing
 
-Contributions are welcome.
+Contributions are welcome! Areas where contributions are particularly valuable:
 
-- For backend changes, see the `asentric` repository and open a Pull Request with a clear description and semantic commit messages.
-- For documentation and architecture updates, use the `internal-docs` repository and keep decision logs and diagrams in sync with code changes.
+- New detection rules
+- Protocol registry entries
+- Documentation improvements
+- Bug fixes and testing
+- Performance optimizations
 
-Please discuss major design changes in an issue or RFC-style document before opening a large PR.
+Please refer to the main repository for contributing guidelines.
 
 ---
 
-## Contact
+## License
 
-- Issues and feature requests: GitHub Issues in the corresponding repository
-- For protocol integrations or deeper collaboration: reach out via the contact information listed in the organization profile or open an issue labeled `integration`.
+MIT License. See the `LICENSE` file in the repository for details.
+
+---
+
+## Links
+
+- 🌐 [Documentation](https://asentric.io)
+- 💻 [GitHub Repository](https://github.com/asentric/asentric)
+- 🐛 [Issue Tracker](https://github.com/asentric/asentric/issues)
+- 🎥 [Demo Video](https://youtu.be/Oz2dfZPI_8A)
+
+---
+
+**Built for the Mantle Network ecosystem by security researchers and protocol developers.**
 
 
